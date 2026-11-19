@@ -37,6 +37,8 @@ services:
       MYSQL_USER: weightfactor
       MYSQL_PASSWORD: secret
       MYSQL_ROOT_PASSWORD: rootsecret
+    ports:
+      - "127.0.0.1:3307:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:

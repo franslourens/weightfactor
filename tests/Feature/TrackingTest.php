@@ -203,6 +203,13 @@ class TrackingTest extends TestCase
             ->assertSee('P 12.0 g')
             ->assertSee('C 50.0 g')
             ->assertSee('F 8.0 g');
+
+        auth()->logout();
+
+        $this->get('/')
+            ->assertSee('Calories, last 14 days')
+            ->assertSee('350')
+            ->assertDontSee('Oats with milk');
     }
 
     public function test_food_can_be_logged_for_the_sunday_week_and_totals_it(): void

@@ -326,18 +326,21 @@
         <article class="card">
             <h2>Calories, last 14 days</h2>
             <x-bar-chart :points="$caloriePoints" />
-            @if ($foods->isEmpty())
-                <p class="empty">No food logged yet.</p>
-            @else
-                <ul class="log">
-                    @foreach ($foods as $food)
-                        <li>
-                            <span>
-                                {{ $food->eaten_on->format('M j') }} · {{ $food->name }}
-                                <small>P {{ number_format($food->totalProtein(), 1) }} g · C {{ number_format($food->totalCarbs(), 1) }} g · F {{ number_format($food->totalFat(), 1) }} g · × {{ $food->quantityLabel() }}</small>
-                            </span>
-                            <strong>{{ number_format($food->totalCalories()) }} kcal</strong>
-                            @auth
+            @guest
+                <p class="figure">{{ number_format(array_sum(array_column($caloriePoints, 'value'))) }} <span>kcal</span></p>
+            @endguest
+            @auth
+                @if ($foods->isEmpty())
+                    <p class="empty">No food logged yet.</p>
+                @else
+                    <ul class="log">
+                        @foreach ($foods as $food)
+                            <li>
+                                <span>
+                                    {{ $food->eaten_on->format('M j') }} · {{ $food->name }}
+                                    <small>P {{ number_format($food->totalProtein(), 1) }} g · C {{ number_format($food->totalCarbs(), 1) }} g · F {{ number_format($food->totalFat(), 1) }} g · × {{ $food->quantityLabel() }}</small>
+                                </span>
+                                <strong>{{ number_format($food->totalCalories()) }} kcal</strong>
                                 <div class="actions">
                                     <form class="quantity" method="post" action="{{ route('foods.update', $food) }}">
                                         @csrf
@@ -351,11 +354,11 @@
                                         <button type="submit" class="text">Remove</button>
                                     </form>
                                 </div>
-                            @endauth
-                        </li>
-                    @endforeach
-                </ul>
-            @endif
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            @endauth
         </article>
     </section>
     @auth

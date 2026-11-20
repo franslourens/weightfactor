@@ -6,6 +6,8 @@ use App\Mail\PasswordChanged;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Throwable;
 
@@ -21,9 +23,7 @@ class AccountController extends Controller
 
         return view('account', [
             'user' => $user,
-            'publicUrl' => $user->isOwner()
-                ? route('dashboard')
-                : route('profile.show', $user),
+            'publicUrl' => route('profile.show', $user),
         ]);
     }
 
@@ -34,9 +34,19 @@ class AccountController extends Controller
     {
         $user = $request->user();
         $passwordChanged = $request->filled('password');
+        $request->merge([
+            'username' => Str::slug($request->string('username')->toString()),
+        ]);
 
         $rules = [
             'name' => ['required', 'string', 'max:120'],
+            'username' => [
+                'required',
+                'string',
+                'max:60',
+                'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
+                Rule::unique('users', 'slug')->ignore($user->id),
+            ],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
         ];
 
@@ -44,9 +54,14 @@ class AccountController extends Controller
             $rules['current_password'] = ['required', 'current_password'];
         }
 
-        $validated = $request->validate($rules);
+        $validated = $request->validate($rules, [
+            'username.required' => 'Choose a username using letters and numbers.',
+            'username.regex' => 'Choose a username using letters and numbers.',
+            'username.unique' => 'That username is already taken.',
+        ]);
 
         $user->name = $validated['name'];
+        $user->slug = $validated['username'];
 
         if ($passwordChanged) {
             $user->password = $validated['password'];

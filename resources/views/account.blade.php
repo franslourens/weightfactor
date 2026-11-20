@@ -3,12 +3,20 @@
         @csrf
         @method('PUT')
         <h2>Account</h2>
-        <p class="hint">Your name is shown on your public page. The link stays <a href="{{ $publicUrl }}">{{ $publicUrl }}</a>.</p>
+        <p class="hint">Your name is shown on your public page. Your username is the last part of <a href="{{ $publicUrl }}">{{ $publicUrl }}</a>.</p>
         <label>
             Name
             <input type="text" name="name" value="{{ old('name', $user->name) }}" autocomplete="name" required>
         </label>
         @error('name')
+            <p class="error">{{ $message }}</p>
+        @enderror
+        <label>
+            Username
+            <input type="text" name="username" value="{{ old('username', $user->slug) }}" autocapitalize="none" spellcheck="false" required>
+        </label>
+        <p class="hint">Use letters and numbers. Saving a new username replaces the public link, and it has to be one nobody else is using.</p>
+        @error('username')
             <p class="error">{{ $message }}</p>
         @enderror
         <p class="hint">Email {{ $user->email }}</p>

@@ -730,24 +730,30 @@ class TrackingTest extends TestCase
             'password_confirmation' => 'secret-pass',
         ]);
 
+        $slug = auth()->user()->slug;
+
         $this->get('/account')
             ->assertOk()
             ->assertSee('Save account')
             ->assertSee('alex@example.com')
             ->assertDontSee('name="email"', false)
-            ->assertSee('value="Alex"', false);
+            ->assertSee('value="Alex"', false)
+            ->assertSee('value="'.$slug.'"', false);
 
         $this->put('/account', [
             'name' => 'Alex Roux',
+            'username' => $slug,
             'email' => 'alex.roux@example.com',
         ])->assertRedirect()
             ->assertSessionHas('status', 'Account saved.');
 
         $this->assertSame('alex@example.com', auth()->user()->fresh()->email);
+        $this->assertSame($slug, auth()->user()->fresh()->slug);
         Mail::assertNotSent(PasswordChanged::class);
 
         $this->put('/account', [
             'name' => 'Alex Roux',
+            'username' => $slug,
             'password' => 'newer-pass',
             'password_confirmation' => 'newer-pass',
             'current_password' => 'wrong-pass',
@@ -756,6 +762,7 @@ class TrackingTest extends TestCase
 
         $this->put('/account', [
             'name' => 'Alex Roux',
+            'username' => $slug,
             'password' => 'newer-pass',
             'password_confirmation' => 'newer-pass',
             'current_password' => 'secret-pass',
@@ -783,6 +790,41 @@ class TrackingTest extends TestCase
         $this->post('/logout');
 
         $this->get('/u/'.$alex->slug)->assertSee("Alex Roux's profile", false);
+    }
+
+    public function test_a_user_can_change_to_a_free_username(): void
+    {
+        $taken = User::factory()->create(['name' => 'Taken']);
+        $taken->slug = 'taken-name';
+        $taken->save();
+
+        $this->post('/register', [
+            'name' => 'Alex',
+            'email' => 'alex@example.com',
+            'password' => 'secret-pass',
+            'password_confirmation' => 'secret-pass',
+        ]);
+
+        $old = auth()->user()->slug;
+
+        $this->put('/account', [
+            'name' => 'Alex',
+            'username' => 'taken-name',
+        ])->assertSessionHasErrors('username');
+
+        $this->assertSame($old, auth()->user()->fresh()->slug);
+
+        $this->put('/account', [
+            'name' => 'Alex',
+            'username' => 'Alex Page',
+        ])->assertSessionHas('status', 'Account saved.');
+
+        $this->assertSame('alex-page', auth()->user()->fresh()->slug);
+
+        $this->post('/logout');
+
+        $this->get('/u/alex-page')->assertOk()->assertSee("Alex's profile", false);
+        $this->get('/u/'.$old)->assertNotFound();
     }
 
     public function test_signup_sends_a_welcome_email(): void

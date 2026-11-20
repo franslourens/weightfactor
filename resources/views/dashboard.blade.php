@@ -1,6 +1,6 @@
 <x-layout>
     @if ($personal)
-        <p class="hint personal">Your profile. <a href="{{ route('account.edit') }}">Edit your name</a>. The home page stays the main dashboard.</p>
+        <p class="hint personal">Your profile. <a href="{{ route('account.edit') }}">Edit your name and username</a>. The home page stays the main dashboard.</p>
     @endif
     @if ($publicName)
         <p class="hint personal">{{ $publicName }}'s profile.</p>

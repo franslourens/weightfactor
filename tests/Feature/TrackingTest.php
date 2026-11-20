@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Mail\PasswordChanged;
+use App\Mail\Welcome;
 use App\Models\BodyFatEntry;
 use App\Models\FoodEntry;
 use App\Models\Profile;
@@ -12,6 +14,7 @@ use App\Support\BodyPlan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class TrackingTest extends TestCase
@@ -25,6 +28,12 @@ class TrackingTest extends TestCase
         parent::setUp();
 
         $this->owner = User::factory()->create();
+        config(['owner.email' => $this->owner->email]);
+
+        Profile::query()->whereNull('user_id')->update(['user_id' => $this->owner->id]);
+        WeightEntry::query()->whereNull('user_id')->update(['user_id' => $this->owner->id]);
+        FoodEntry::query()->whereNull('user_id')->update(['user_id' => $this->owner->id]);
+        BodyFatEntry::query()->whereNull('user_id')->update(['user_id' => $this->owner->id]);
     }
 
     private function asOwner(): static
@@ -35,13 +44,14 @@ class TrackingTest extends TestCase
     public function test_dashboard_loads(): void
     {
         WeightEntry::query()->create([
+            'user_id' => $this->owner->id,
             'recorded_on' => '2026-11-19',
             'weight_kg' => 99.55,
         ]);
 
         $this->get('/')
             ->assertOk()
-            ->assertSee('WeightFactor')
+            ->assertSee('Weight Factor')
             ->assertSee('99.55 kg')
             ->assertSee('Log in')
             ->assertSee('75–85 kg')
@@ -102,6 +112,7 @@ class TrackingTest extends TestCase
         $this->assertEqualsWithDelta(24.9, BodyFat::navy('female', 165, 32, 70, 95), 0.05);
 
         WeightEntry::query()->create([
+            'user_id' => $this->owner->id,
             'recorded_on' => '2026-11-19',
             'weight_kg' => 99.55,
         ]);
@@ -129,6 +140,7 @@ class TrackingTest extends TestCase
     public function test_food_quantity_updates_the_logged_line(): void
     {
         $food = FoodEntry::query()->create([
+            'user_id' => $this->owner->id,
             'eaten_on' => now()->toDateString(),
             'name' => 'Oats with milk',
             'calories' => 350,
@@ -271,10 +283,12 @@ class TrackingTest extends TestCase
     public function test_entries_can_be_removed(): void
     {
         $weight = WeightEntry::query()->create([
+            'user_id' => $this->owner->id,
             'recorded_on' => '2026-11-18',
             'weight_kg' => 81.5,
         ]);
         $food = FoodEntry::query()->create([
+            'user_id' => $this->owner->id,
             'eaten_on' => '2026-11-18',
             'name' => 'Eggs',
             'calories' => 180,
@@ -490,6 +504,47 @@ class TrackingTest extends TestCase
             ]);
     }
 
+    public function test_a_logged_custom_food_can_be_searched_again(): void
+    {
+        Http::fake();
+
+        FoodEntry::query()->create([
+            'user_id' => $this->owner->id,
+            'eaten_on' => '2026-11-18',
+            'name' => 'Garage pie',
+            'calories' => 420,
+            'protein_g' => 12,
+            'carbs_g' => 40,
+            'fat_g' => 22,
+        ]);
+
+        $other = User::factory()->create();
+        FoodEntry::query()->create([
+            'user_id' => $other->id,
+            'eaten_on' => '2026-11-18',
+            'name' => 'Secret stew',
+            'calories' => 300,
+            'protein_g' => 20,
+            'carbs_g' => 10,
+            'fat_g' => 15,
+        ]);
+
+        $foods = $this->asOwner()->getJson('/foods/search?q=pie')->assertOk()->json();
+
+        $this->assertSame('Garage pie', $foods[0]['name']);
+        $this->assertSame(420, $foods[0]['calories']);
+        $this->assertEquals(12, $foods[0]['protein']);
+        $this->assertEquals(40, $foods[0]['carbs']);
+        $this->assertEquals(22, $foods[0]['fat']);
+        $this->assertSame('Your log', $foods[0]['source']);
+
+        $shared = collect($this->asOwner()->getJson('/foods/search?q=secret')->json())
+            ->firstWhere('name', 'Secret stew');
+        $this->assertNotNull($shared);
+        $this->assertSame(300, $shared['calories']);
+        $this->assertSame('Logged by '.$other->name, $shared['source']);
+    }
+
     public function test_packaged_food_prefers_the_whole_serving(): void
     {
         Http::fake(function ($request) {
@@ -594,5 +649,207 @@ class TrackingTest extends TestCase
             'recorded_on' => '2026-11-19',
             'weight_kg' => 'nope',
         ])->assertSessionHasErrors('weight_kg');
+    }
+
+    public function test_a_member_keeps_a_private_profile_and_the_dashboard_stays_the_owners(): void
+    {
+        WeightEntry::query()->create([
+            'user_id' => $this->owner->id,
+            'recorded_on' => '2026-11-19',
+            'weight_kg' => 99.55,
+        ]);
+
+        $this->get('/register')->assertOk()->assertSee('Sign up');
+
+        $this->post('/register', [
+            'name' => 'Alex',
+            'email' => 'alex@example.com',
+            'password' => 'secret-pass',
+            'password_confirmation' => 'secret-pass',
+        ]);
+
+        $alex = User::query()->where('email', 'alex@example.com')->first();
+        $profileUrl = '/u/'.$alex->slug;
+
+        $this->put('/profile', [
+            'sex' => 'male',
+            'age' => 30,
+            'height_cm' => 175,
+            'body_fat_percent' => 20,
+            'target_body_fat_percent' => 15,
+            'activity' => 'light',
+            'weekly_loss_kg' => 0.5,
+        ])->assertSessionHasErrors('weight');
+
+        $this->get('/me')->assertRedirect($profileUrl);
+
+        $this->get($profileUrl)
+            ->assertOk()
+            ->assertSee('Your profile')
+            ->assertSee('Save weight')
+            ->assertSee('Log your weight before you can update the target.')
+            ->assertDontSee('Update target')
+            ->assertDontSee('99.55 kg');
+
+        $this->get('/')
+            ->assertSee('99.55 kg')
+            ->assertDontSee('Save weight')
+            ->assertSee('Your profile');
+
+        $this->from($profileUrl)->post('/weights', [
+            'recorded_on' => '2026-11-20',
+            'weight_kg' => '70.25',
+        ])->assertRedirect($profileUrl);
+
+        $this->get('/')->assertDontSee('70.25');
+        $this->get($profileUrl)
+            ->assertSee('70.25 kg')
+            ->assertSee('Update target');
+
+        $ownerWeight = WeightEntry::query()->where('user_id', $this->owner->id)->first();
+        $this->delete(route('weights.destroy', $ownerWeight))->assertNotFound();
+
+        $this->post('/logout');
+
+        $this->post('/login', [
+            'email' => 'alex@example.com',
+            'password' => 'secret-pass',
+        ])->assertRedirect($profileUrl);
+
+        $this->asOwner()->get('/me')->assertRedirect('/');
+    }
+
+    public function test_a_user_can_update_their_account(): void
+    {
+        Mail::fake();
+
+        $this->post('/register', [
+            'name' => 'Alex',
+            'email' => 'alex@example.com',
+            'password' => 'secret-pass',
+            'password_confirmation' => 'secret-pass',
+        ]);
+
+        $this->get('/account')
+            ->assertOk()
+            ->assertSee('Save account')
+            ->assertSee('alex@example.com')
+            ->assertDontSee('name="email"', false)
+            ->assertSee('value="Alex"', false);
+
+        $this->put('/account', [
+            'name' => 'Alex Roux',
+            'email' => 'alex.roux@example.com',
+        ])->assertRedirect()
+            ->assertSessionHas('status', 'Account saved.');
+
+        $this->assertSame('alex@example.com', auth()->user()->fresh()->email);
+        Mail::assertNotSent(PasswordChanged::class);
+
+        $this->put('/account', [
+            'name' => 'Alex Roux',
+            'password' => 'newer-pass',
+            'password_confirmation' => 'newer-pass',
+            'current_password' => 'wrong-pass',
+        ])->assertSessionHasErrors('current_password');
+        Mail::assertNotSent(PasswordChanged::class);
+
+        $this->put('/account', [
+            'name' => 'Alex Roux',
+            'password' => 'newer-pass',
+            'password_confirmation' => 'newer-pass',
+            'current_password' => 'secret-pass',
+        ])->assertSessionHas('status', 'Account saved.');
+
+        Mail::assertSent(PasswordChanged::class, function (PasswordChanged $mail) {
+            $body = $mail->render();
+
+            return $mail->hasTo('alex@example.com')
+                && $mail->envelope()->subject === 'Your Weight Factor password was changed'
+                && str_contains($body, 'password for your Weight Factor account was just changed')
+                && ! str_contains($body, 'newer-pass');
+        });
+
+        $this->post('/logout');
+
+        $this->post('/login', [
+            'email' => 'alex@example.com',
+            'password' => 'newer-pass',
+        ])->assertRedirect();
+
+        $alex = User::query()->where('email', 'alex@example.com')->first();
+        $this->assertSame('Alex Roux', $alex->name);
+
+        $this->post('/logout');
+
+        $this->get('/u/'.$alex->slug)->assertSee("Alex Roux's profile", false);
+    }
+
+    public function test_signup_sends_a_welcome_email(): void
+    {
+        Mail::fake();
+
+        $this->post('/register', [
+            'name' => 'Alex',
+            'email' => 'alex@example.com',
+            'password' => 'secret-pass',
+            'password_confirmation' => 'secret-pass',
+        ]);
+
+        $alex = User::query()->where('email', 'alex@example.com')->first();
+
+        Mail::assertSent(Welcome::class, function (Welcome $mail) use ($alex) {
+            return $mail->hasTo('alex@example.com')
+                && $mail->user->is($alex)
+                && str_contains($mail->render(), '/u/'.$alex->slug);
+        });
+    }
+
+    public function test_a_member_can_share_a_public_profile_link(): void
+    {
+        $this->post('/register', [
+            'name' => 'Alex',
+            'email' => 'alex@example.com',
+            'password' => 'secret-pass',
+            'password_confirmation' => 'secret-pass',
+        ]);
+
+        $alex = User::query()->where('email', 'alex@example.com')->first();
+        $this->assertNotNull($alex->slug);
+
+        WeightEntry::query()->create([
+            'user_id' => $alex->id,
+            'recorded_on' => '2026-11-20',
+            'weight_kg' => 70.25,
+        ]);
+        FoodEntry::query()->create([
+            'user_id' => $alex->id,
+            'eaten_on' => '2026-11-20',
+            'name' => 'Secret stew',
+            'calories' => 300,
+            'protein_g' => 20,
+            'carbs_g' => 10,
+            'fat_g' => 15,
+        ]);
+
+        $this->get('/me')->assertRedirect('/u/'.$alex->slug);
+
+        $this->get('/u/'.$alex->slug)
+            ->assertOk()
+            ->assertSee('70.25 kg')
+            ->assertSee('Save weight');
+
+        $this->post('/logout');
+
+        $this->get('/u/'.$alex->slug)
+            ->assertOk()
+            ->assertSee("Alex's profile", false)
+            ->assertSee('70.25 kg')
+            ->assertDontSee('Save weight')
+            ->assertDontSee('Update target')
+            ->assertDontSee('Secret stew');
+
+        $this->get('/')->assertDontSee('70.25 kg');
+        $this->get('/u/missing-person')->assertNotFound();
     }
 }

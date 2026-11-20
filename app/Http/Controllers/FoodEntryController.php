@@ -28,7 +28,7 @@ class FoodEntryController extends Controller
             'eaten_on.before_or_equal' => 'Choose a day from this Monday through Sunday.',
         ]);
 
-        FoodEntry::query()->create($validated);
+        $request->user()->foods()->create($validated);
 
         return back()->with('status', 'Food logged.');
     }
@@ -38,6 +38,8 @@ class FoodEntryController extends Controller
      */
     public function update(Request $request, FoodEntry $foodEntry): RedirectResponse
     {
+        abort_unless((int) $foodEntry->user_id === (int) $request->user()->id, 404);
+
         $validated = $request->validate([
             'quantity' => ['required', 'numeric', 'min:0.1', 'max:20'],
         ]);
@@ -52,8 +54,10 @@ class FoodEntryController extends Controller
     /**
      * Remove a food log.
      */
-    public function destroy(FoodEntry $foodEntry): RedirectResponse
+    public function destroy(Request $request, FoodEntry $foodEntry): RedirectResponse
     {
+        abort_unless((int) $foodEntry->user_id === (int) $request->user()->id, 404);
+
         $foodEntry->delete();
 
         return back()->with('status', 'Food removed.');

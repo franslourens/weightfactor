@@ -18,7 +18,7 @@ class WeightEntryController extends Controller
             'weight_kg' => ['required', 'numeric', 'min:20', 'max:400'],
         ]);
 
-        $entry = WeightEntry::query()
+        $entry = $request->user()->weights()
             ->whereDate('recorded_on', $validated['recorded_on'])
             ->first();
 
@@ -28,7 +28,7 @@ class WeightEntryController extends Controller
             return back()->with('status', 'Weight saved.');
         }
 
-        WeightEntry::query()->create($validated);
+        $request->user()->weights()->create($validated);
 
         return back()->with('status', 'Weight saved.');
     }
@@ -36,8 +36,10 @@ class WeightEntryController extends Controller
     /**
      * Remove a weigh-in.
      */
-    public function destroy(WeightEntry $weightEntry): RedirectResponse
+    public function destroy(Request $request, WeightEntry $weightEntry): RedirectResponse
     {
+        abort_unless((int) $weightEntry->user_id === (int) $request->user()->id, 404);
+
         $weightEntry->delete();
 
         return back()->with('status', 'Weight removed.');

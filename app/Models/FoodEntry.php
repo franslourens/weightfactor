@@ -4,10 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['eaten_on', 'name', 'quantity', 'calories', 'protein_g', 'carbs_g', 'fat_g'])]
+#[Fillable(['user_id', 'eaten_on', 'name', 'quantity', 'calories', 'protein_g', 'carbs_g', 'fat_g'])]
 class FoodEntry extends Model
 {
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     /**
      * Get the attributes that should be cast.
      *

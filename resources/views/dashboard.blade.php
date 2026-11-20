@@ -1,11 +1,22 @@
 <x-layout>
+    @if ($personal)
+        <p class="hint personal">Your profile. <a href="{{ route('account.edit') }}">Edit your name</a>. The home page stays the main dashboard.</p>
+    @endif
+    @if ($publicName)
+        <p class="hint personal">{{ $publicName }}'s profile.</p>
+    @endif
+    @if ($shareUrl)
+        <p class="hint personal">Anyone with this link can see this page: <a href="{{ $shareUrl }}">{{ $shareUrl }}</a></p>
+    @endif
     <section class="stats">
         <article>
             <h2>Latest weight</h2>
             <p class="figure">{{ $latest ? number_format((float) $latest->weight_kg, 2) : '—' }} <span>kg</span></p>
             <p class="meta">
-                @if ($change === null)
-                    Log two weigh-ins to see the change.
+                @if (! $latest)
+                    No weigh-in yet.
+                @elseif ($change === null)
+                    Log another weigh-in to see the change.
                 @else
                     {{ $change > 0 ? '+' : '' }}{{ number_format($change, 2) }} kg since the previous weigh-in
                     @if ($fromStart !== null)
@@ -35,10 +46,14 @@
         </article>
     </section>
 
+    @if ($canEdit && ! $latest)
+        @include('partials.weight-form')
+    @endif
+
     <section class="card plan">
         <h2>Target</h2>
         @if (! $plan)
-            <p class="empty">Log a weigh-in to calculate the target weight.</p>
+            <p class="empty">Log your weight before you can update the target.</p>
         @else
             <div class="facts">
                 <div>
@@ -122,11 +137,12 @@
         @endif
 
         @if ($profile)
-            <form class="profile" method="post" action="{{ route('profile.update') }}" @guest onsubmit="return false" @endguest>
-                @auth
+            @php $canUpdateTarget = $canEdit && $latest; @endphp
+            <form class="profile" method="post" action="{{ route('profile.update') }}" @unless ($canUpdateTarget) onsubmit="return false" @endunless>
+                @if ($canUpdateTarget)
                     @csrf
                     @method('PUT')
-                @endauth
+                @endif
                 @if ($plan)
                     <div class="deficit">
                         <div class="deficit-heading">
@@ -139,30 +155,30 @@
                 @endif
                 <label>
                     Sex
-                    <select name="sex" @disabled(auth()->guest())>
+                    <select name="sex" @disabled(! $canUpdateTarget)>
                         <option value="male" @selected(old('sex', $profile->sex) === 'male')>Male</option>
                         <option value="female" @selected(old('sex', $profile->sex) === 'female')>Female</option>
                     </select>
                 </label>
                 <label>
                     Age
-                    <input type="number" name="age" min="15" max="100" value="{{ old('age', $profile->age) }}" @disabled(auth()->guest()) @required(auth()->check())>
+                    <input type="number" name="age" min="15" max="100" value="{{ old('age', $profile->age) }}" @disabled(! $canUpdateTarget) @required($canUpdateTarget)>
                 </label>
                 <label>
                     Height (cm)
-                    <input type="number" name="height_cm" min="120" max="230" step="any" value="{{ old('height_cm', $profile->height_cm) }}" @disabled(auth()->guest()) @required(auth()->check())>
+                    <input type="number" name="height_cm" min="120" max="230" step="any" value="{{ old('height_cm', $profile->height_cm) }}" @disabled(! $canUpdateTarget) @required($canUpdateTarget)>
                 </label>
                 <label>
                     Body fat %
-                    <input type="number" name="body_fat_percent" min="3" max="60" step="any" value="{{ old('body_fat_percent', $profile->body_fat_percent) }}" @disabled(auth()->guest()) @required(auth()->check())>
+                    <input type="number" name="body_fat_percent" min="3" max="60" step="any" value="{{ old('body_fat_percent', $profile->body_fat_percent) }}" @disabled(! $canUpdateTarget) @required($canUpdateTarget)>
                 </label>
                 <label>
                     Target body fat %
-                    <input type="number" name="target_body_fat_percent" min="3" max="60" step="any" value="{{ old('target_body_fat_percent', $profile->target_body_fat_percent) }}" @disabled(auth()->guest()) @required(auth()->check())>
+                    <input type="number" name="target_body_fat_percent" min="3" max="60" step="any" value="{{ old('target_body_fat_percent', $profile->target_body_fat_percent) }}" @disabled(! $canUpdateTarget) @required($canUpdateTarget)>
                 </label>
                 <label>
                     Activity
-                    <select name="activity" @disabled(auth()->guest())>
+                    <select name="activity" @disabled(! $canUpdateTarget)>
                         @foreach (\App\Models\Profile::activities() as $key => $activity)
                             <option value="{{ $key }}" @selected(old('activity', $profile->activity) === $key)>{{ $activity['label'] }}</option>
                         @endforeach
@@ -174,11 +190,14 @@
                         $weeklyLossValue = old('weekly_loss_kg', $profile->weekly_loss_kg);
                         $weeklyLossValue = rtrim(rtrim(number_format((float) $weeklyLossValue, 4, '.', ''), '0'), '.');
                     @endphp
-                    <input type="number" name="weekly_loss_kg" min="0" max="2" step="any" value="{{ $weeklyLossValue === '' ? '0' : $weeklyLossValue }}" @disabled(auth()->guest()) @required(auth()->check())>
+                    <input type="number" name="weekly_loss_kg" min="0" max="2" step="any" value="{{ $weeklyLossValue === '' ? '0' : $weeklyLossValue }}" @disabled(! $canUpdateTarget) @required($canUpdateTarget)>
                 </label>
-                @auth
+                @error('weight')
+                    <p class="error">{{ $message }}</p>
+                @enderror
+                @if ($canUpdateTarget)
                     <button type="submit">Update target</button>
-                @endauth
+                @endif
             </form>
             @foreach (['sex', 'age', 'height_cm', 'body_fat_percent', 'target_body_fat_percent', 'activity', 'weekly_loss_kg'] as $field)
                 @error($field)
@@ -206,7 +225,7 @@
             @endif
         </div>
 
-        @auth
+        @if ($canEdit)
             @if ($profile)
                 <form class="body-fat" method="post" action="{{ route('body-fat.update') }}">
                     @csrf
@@ -234,31 +253,14 @@
                     @endforeach
                 </form>
             @endif
-        @endauth
+        @endif
     </section>
 
-    @auth
+    @if ($canEdit)
     <section class="grid">
-        <form class="card" method="post" action="{{ route('weights.store') }}">
-            @csrf
-            <h2>Log weight</h2>
-            <label>
-                Date
-                <input type="date" name="recorded_on" value="{{ old('recorded_on', $today) }}" required>
-            </label>
-            @error('recorded_on')
-                <p class="error">{{ $message }}</p>
-            @enderror
-            <label>
-                Weight (kg)
-                <input type="number" name="weight_kg" min="20" max="400" step="0.01" value="{{ old('weight_kg') }}" required>
-            </label>
-            @error('weight_kg')
-                <p class="error">{{ $message }}</p>
-            @enderror
-            <button type="submit">Save weight</button>
-            <p class="hint">One weight per day. Saving the same date replaces it.</p>
-        </form>
+        @if ($latest)
+            @include('partials.weight-form')
+        @endif
 
         <form class="card" method="post" action="{{ route('foods.store') }}">
             @csrf
@@ -307,10 +309,10 @@
                 @enderror
             @endforeach
             <button type="submit">Add food</button>
-            <p class="hint">Search fills calories, protein, carbs, and fat. You can edit them before saving.</p>
+            <p class="hint">Search fills calories, protein, carbs, and fat. Foods you or anyone else have logged show up here too.</p>
         </form>
     </section>
-    @endauth
+    @endif
 
     <section class="grid">
         <article class="card">
@@ -324,13 +326,13 @@
                         <li>
                             <span>{{ $weight->recorded_on->format('M j, Y') }}</span>
                             <strong>{{ number_format((float) $weight->weight_kg, 2) }} kg</strong>
-                            @auth
+                            @if ($canEdit)
                                 <form method="post" action="{{ route('weights.destroy', $weight) }}">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="text">Remove</button>
                                 </form>
-                            @endauth
+                            @endif
                         </li>
                     @endforeach
                 </ul>
@@ -340,10 +342,10 @@
         <article class="card">
             <h2>Calories, last 14 days</h2>
             <x-bar-chart :points="$caloriePoints" />
-            @guest
+            @unless ($canEdit)
                 <p class="figure">{{ number_format(array_sum(array_column($caloriePoints, 'value'))) }} <span>kcal</span></p>
-            @endguest
-            @auth
+            @endunless
+            @if ($canEdit)
                 @if ($foods->isEmpty())
                     <p class="empty">No food logged yet.</p>
                 @else
@@ -372,14 +374,14 @@
                         @endforeach
                     </ul>
                 @endif
-            @endauth
+            @endif
         </article>
     </section>
-    @auth
+    @if ($canEdit)
         @push('scripts')
             <script src="{{ asset('js/food-search.js') }}?v={{ filemtime(public_path('js/food-search.js')) }}"></script>
         @endpush
-    @endauth
+    @endif
     @if ($plan)
         @push('scripts')
             <script src="{{ asset('js/deficit-slider.js') }}?v={{ filemtime(public_path('js/deficit-slider.js')) }}"></script>

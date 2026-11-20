@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\BodyFatEntry;
 use App\Models\Profile;
-use App\Models\WeightEntry;
 use App\Support\BodyFat;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,6 +17,12 @@ class ProfileController extends Controller
      */
     public function update(Request $request): RedirectResponse
     {
+        if ($request->user()->weights()->doesntExist()) {
+            throw ValidationException::withMessages([
+                'weight' => 'Log your weight before you can update the target.',
+            ]);
+        }
+
         $validated = $request->validate([
             'sex' => ['required', Rule::in(['male', 'female'])],
             'age' => ['required', 'integer', 'min:15', 'max:100'],
@@ -28,12 +33,12 @@ class ProfileController extends Controller
             'weekly_loss_kg' => ['required', 'numeric', 'min:0', 'max:2'],
         ]);
 
-        $profile = Profile::query()->firstOrFail();
+        $profile = $request->user()->profile ?? abort(404);
         $previous = number_format((float) $profile->body_fat_percent, 1);
         $profile->update($validated);
 
         if ($previous !== number_format((float) $validated['body_fat_percent'], 1)) {
-            BodyFatEntry::record((float) $validated['body_fat_percent']);
+            BodyFatEntry::record($request->user(), (float) $validated['body_fat_percent']);
         }
 
         return back()->with('status', 'Target updated.');
@@ -44,7 +49,7 @@ class ProfileController extends Controller
      */
     public function bodyFat(Request $request): RedirectResponse
     {
-        $profile = Profile::query()->firstOrFail();
+        $profile = $request->user()->profile ?? abort(404);
         $rules = [
             'neck_cm' => ['required', 'numeric', 'min:20', 'max:70'],
             'waist_cm' => ['required', 'numeric', 'min:40', 'max:200'],
@@ -75,10 +80,10 @@ class ProfileController extends Controller
         }
 
         $profile->update(['body_fat_percent' => $navy]);
-        BodyFatEntry::record($navy);
+        BodyFatEntry::record($request->user(), $navy);
 
         $status = 'Body fat updated to '.number_format($navy, 1).'% ('.BodyFat::category($profile->sex, $navy).', U.S. Navy).';
-        $latest = WeightEntry::query()->orderByDesc('recorded_on')->first();
+        $latest = $request->user()->weights()->orderByDesc('recorded_on')->first();
 
         if ($latest) {
             $meters = (float) $profile->height_cm / 100;

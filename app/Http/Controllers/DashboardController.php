@@ -2,23 +2,67 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\BodyFatEntry;
 use App\Models\FoodEntry;
 use App\Models\Profile;
-use App\Models\WeightEntry;
+use App\Models\User;
 use App\Support\BodyPlan;
 use App\Support\FoodWeek;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Collection;
 
 class DashboardController extends Controller
 {
     /**
-     * Show today's calories and the weight trend.
+     * Show the owner's calories and weight. This page stays theirs.
      */
     public function index(): View
     {
-        $weights = WeightEntry::query()->orderBy('recorded_on')->get();
-        $foods = FoodEntry::query()->orderByDesc('eaten_on')->orderByDesc('id')->limit(20)->get();
+        return $this->page(User::owner(), personal: false);
+    }
+
+    /**
+     * Show the signed-in user's own profile.
+     */
+    public function mine(): View|RedirectResponse
+    {
+        $user = auth()->user();
+
+        if ($user->isOwner()) {
+            return redirect()->route('dashboard');
+        }
+
+        if ($user->profile === null) {
+            $user->profile()->create(Profile::defaults());
+            $user->unsetRelation('profile');
+        }
+
+        $user->ensureSlug();
+
+        return redirect()->route('profile.show', $user);
+    }
+
+    /**
+     * Show one person's profile on its own link. Others can look, only they can change it.
+     */
+    public function show(User $user): View
+    {
+        $own = auth()->id() === $user->id;
+
+        return $this->page($user, personal: $own && ! $user->isOwner(), publicName: $own ? null : $user->name);
+    }
+
+    /**
+     * @param  bool  $personal  True on a member's own page, false on the public dashboard.
+     */
+    private function page(?User $user, bool $personal, ?string $publicName = null): View
+    {
+        $weights = $user
+            ? $user->weights()->orderBy('recorded_on')->get()
+            : new Collection;
+        $foods = $user
+            ? $user->foods()->orderByDesc('eaten_on')->orderByDesc('id')->limit(20)->get()
+            : new Collection;
 
         $latest = $weights->last();
         $previous = $weights->count() > 1 ? $weights[$weights->count() - 2] : null;
@@ -30,9 +74,9 @@ class DashboardController extends Controller
             : null;
 
         $start = now()->startOfDay()->subDays(13);
-        $recentFoods = FoodEntry::query()
-            ->whereDate('eaten_on', '>=', $start->toDateString())
-            ->get();
+        $recentFoods = $user
+            ? $user->foods()->whereDate('eaten_on', '>=', $start->toDateString())->get()
+            : new Collection;
         $todayFoods = $recentFoods->filter(
             fn (FoodEntry $food) => $food->eaten_on->toDateString() === now()->toDateString()
         );
@@ -50,17 +94,27 @@ class DashboardController extends Controller
         })->all();
 
         $week = FoodWeek::current();
-        $weekFoods = FoodEntry::query()
-            ->whereDate('eaten_on', '>=', $week->start->toDateString())
-            ->whereDate('eaten_on', '<=', $week->end->toDateString())
-            ->get();
+        $weekFoods = $user
+            ? $user->foods()
+                ->whereDate('eaten_on', '>=', $week->start->toDateString())
+                ->whereDate('eaten_on', '<=', $week->end->toDateString())
+                ->get()
+            : new Collection;
 
-        $profile = Profile::query()->first();
+        $profile = $user?->profile;
         $plan = $profile && $latest
             ? BodyPlan::fromProfile($profile, (float) $latest->weight_kg)
             : null;
 
+        $ownPage = $user !== null && auth()->id() === $user->id;
+
         return view('dashboard', [
+            'personal' => $personal,
+            'publicName' => $publicName,
+            'shareUrl' => $ownPage && $user->slug && ! $user->isOwner()
+                ? route('profile.show', $user)
+                : null,
+            'canEdit' => $ownPage,
             'today' => now()->toDateString(),
             'weekStart' => $week->start->toDateString(),
             'weekEnd' => $week->end->toDateString(),
@@ -78,9 +132,11 @@ class DashboardController extends Controller
             'todayCarbs' => round((float) $todayFoods->sum(fn (FoodEntry $food) => $food->totalCarbs()), 1),
             'todayFat' => round((float) $todayFoods->sum(fn (FoodEntry $food) => $food->totalFat()), 1),
             'weights' => $weights->reverse()->take(10),
-            'bodyFats' => BodyFatEntry::query()->orderByDesc('recorded_at')->orderByDesc('id')->limit(20)->get(),
+            'bodyFats' => $user
+                ? $user->bodyFats()->orderByDesc('recorded_at')->orderByDesc('id')->limit(20)->get()
+                : new Collection,
             'foods' => $foods,
-            'weightPoints' => $weights->map(fn (WeightEntry $entry) => [
+            'weightPoints' => $weights->map(fn ($entry) => [
                 'label' => $entry->recorded_on->format('M j'),
                 'value' => (float) $entry->weight_kg,
             ])->all(),

@@ -29,8 +29,13 @@ class LoginController extends Controller
         }
 
         $request->session()->regenerate();
+        $request->user()->ensureSlug();
 
-        return redirect()->intended(route('dashboard'));
+        $home = $request->user()->isOwner()
+            ? route('dashboard')
+            : route('profile.show', $request->user());
+
+        return redirect()->intended($home);
     }
 
     public function destroy(Request $request): RedirectResponse

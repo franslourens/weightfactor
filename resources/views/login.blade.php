@@ -2,7 +2,7 @@
     <form class="card login" method="post" action="{{ route('login.store') }}">
         @csrf
         <h2>Log in</h2>
-        <p class="hint">Weight, food, and the target stay visible. Only this login can change them.</p>
+        <p class="hint">The home page stays the main dashboard. <a href="{{ route('register') }}">Sign up</a> for your own profile.</p>
         <label>
             Email
             <input type="email" name="email" value="{{ old('email') }}" autocomplete="username" required>

@@ -65,7 +65,7 @@ if (nameInput && results) {
                 title.textContent = food.name;
 
                 const detail = document.createElement('small');
-                detail.textContent = `${food.calories} kcal · P ${food.protein} g · C ${food.carbs} g · F ${food.fat} g · ${food.serving}`;
+                detail.textContent = `${food.calories} kcal · P ${food.protein} g · C ${food.carbs} g · F ${food.fat} g · ${food.serving} · ${food.source}`;
 
                 button.append(title, detail);
                 button.addEventListener('click', () => fill(food));

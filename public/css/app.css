@@ -64,6 +64,13 @@ form.login {
     margin-top: 16px;
 }
 
+.personal { margin-top: 16px; }
+
+.personal a {
+    color: var(--ink);
+    overflow-wrap: anywhere;
+}
+
 .status {
     margin: 16px 0 0;
     padding: 10px 12px;
@@ -77,6 +84,10 @@ form.login {
     grid-template-columns: 1fr 1fr;
     gap: 16px;
     margin-top: 16px;
+}
+
+.grid > .card:only-child {
+    grid-column: 1 / -1;
 }
 
 .stats { grid-template-columns: repeat(3, 1fr); }

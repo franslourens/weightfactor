@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\FoodEntry;
+use App\Models\User;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
@@ -31,7 +32,7 @@ class FoodLookup
         $remote = $this->remoteFoods($query);
 
         return collect()
-            ->merge($this->fromLog($query))
+            ->merge($this->fromLog($query, auth()->user()))
             ->merge(array_slice($this->fromCatalog($query), 0, 6))
             ->merge(array_slice($remote['usda'], 0, 4))
             ->merge(array_slice($this->matchingName($remote['off'], $query), 0, 4))
@@ -44,26 +45,44 @@ class FoodLookup
     /**
      * @return array<int, array{name: string, calories: int, protein: float, carbs: float, fat: float, serving: string, source: string}>
      */
-    private function fromLog(string $query): array
+    private function fromLog(string $query, ?User $user): array
     {
-        $like = '%'.str_replace(['%', '_'], '', $query).'%';
+        $words = array_values(array_filter(
+            preg_split('/\s+/u', $query) ?: [],
+            fn (string $word) => mb_strlen($word) >= 2,
+        ));
 
-        return FoodEntry::query()
-            ->where('name', 'like', $like)
-            ->orderByDesc('id')
-            ->limit(20)
+        if ($words === []) {
+            return [];
+        }
+
+        $foods = FoodEntry::query()->with('user')->orderByDesc('id');
+
+        foreach ($words as $word) {
+            $like = '%'.str_replace(['%', '_', '\\'], '', $word).'%';
+            $foods->where('name', 'like', $like);
+        }
+
+        return $foods
+            ->limit(40)
             ->get()
-            ->unique(fn (FoodEntry $food) => mb_strtolower($food->name))
-            ->take(3)
-            ->map(fn (FoodEntry $food) => [
-                'name' => $food->name,
-                'calories' => (int) $food->calories,
-                'protein' => (float) $food->protein_g,
-                'carbs' => (float) $food->carbs_g,
-                'fat' => (float) $food->fat_g,
-                'serving' => 'previously logged',
-                'source' => 'Your log',
-            ])
+            ->unique(fn (FoodEntry $food) => mb_strtolower($food->name).'|'.$food->user_id)
+            ->sortBy(fn (FoodEntry $food) => $user !== null && (int) $food->user_id === (int) $user->id ? 0 : 1)
+            ->take(5)
+            ->map(function (FoodEntry $food) use ($user) {
+                $own = $user !== null && (int) $food->user_id === (int) $user->id;
+
+                return [
+                    'name' => $food->name,
+                    'calories' => (int) $food->calories,
+                    'protein' => (float) $food->protein_g,
+                    'carbs' => (float) $food->carbs_g,
+                    'fat' => (float) $food->fat_g,
+                    'serving' => 'previously logged',
+                    'source' => $own ? 'Your log' : 'Logged by '.($food->user->name ?? 'someone'),
+                ];
+            })
+            ->values()
             ->all();
     }
 

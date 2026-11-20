@@ -4,8 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
+    'user_id',
     'sex',
     'age',
     'height_cm',
@@ -16,6 +18,29 @@ use Illuminate\Database\Eloquent\Model;
 ])]
 class Profile extends Model
 {
+    /**
+     * Starting figures for a new account, replaced from their own profile.
+     *
+     * @return array<string, int|float|string>
+     */
+    public static function defaults(): array
+    {
+        return [
+            'sex' => 'male',
+            'age' => 30,
+            'height_cm' => 175,
+            'body_fat_percent' => 20,
+            'target_body_fat_percent' => 15,
+            'activity' => 'light',
+            'weekly_loss_kg' => 0.5,
+        ];
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     /**
      * Activity multipliers applied to resting metabolism.
      *

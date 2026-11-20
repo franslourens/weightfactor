@@ -24,6 +24,26 @@ if (nameInput && results) {
         hide();
     };
 
+    const emptyNote = (query) => {
+        if (!/^\d{8,14}$/.test(query)) {
+            return 'No foods found. Try a simpler name, like oats or chicken.';
+        }
+
+        const digits = [...query].map(Number);
+        const check = digits.pop();
+        let total = 0;
+        [...digits].reverse().forEach((digit, index) => {
+            total += digit * (index % 2 === 0 ? 3 : 1);
+        });
+        const expected = (10 - (total % 10)) % 10;
+
+        if (expected !== check) {
+            return `That barcode doesn't check out. The last digit should be ${expected}.`;
+        }
+
+        return 'No product is listed for that barcode.';
+    };
+
     nameInput.addEventListener('input', () => {
         clearTimeout(timer);
         const query = nameInput.value.trim();
@@ -49,7 +69,7 @@ if (nameInput && results) {
             if (foods.length === 0) {
                 const item = document.createElement('li');
                 const note = document.createElement('small');
-                note.textContent = 'No foods found. Try a simpler name, like oats or chicken.';
+                note.textContent = emptyNote(query);
                 item.append(note);
                 results.append(item);
                 results.hidden = false;
@@ -82,4 +102,105 @@ if (nameInput && results) {
             hide();
         }
     });
+
+    const scanButton = document.querySelector('#scan-barcode');
+    const dialog = document.querySelector('#barcode-dialog');
+    const video = document.querySelector('#barcode-video');
+    const status = document.querySelector('#barcode-status');
+    const codeInput = document.querySelector('#barcode-code');
+    const lookupButton = document.querySelector('#barcode-lookup');
+    let stream = null;
+    let scanTimer = null;
+
+    const useCode = (raw) => {
+        const code = String(raw).replace(/\D/g, '');
+
+        if (code.length < 8) {
+            status.textContent = 'Enter the 8 to 14 digits printed under the bars.';
+            codeInput?.focus();
+            return;
+        }
+
+        nameInput.value = code;
+        dialog.close();
+        nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    const stopScan = () => {
+        clearInterval(scanTimer);
+        scanTimer = null;
+        stream?.getTracks().forEach((track) => track.stop());
+        stream = null;
+
+        if (video) {
+            video.srcObject = null;
+        }
+    };
+
+    if (scanButton && dialog && video && status && codeInput) {
+        scanButton.addEventListener('click', async () => {
+            hide();
+            video.hidden = true;
+            codeInput.value = '';
+            status.textContent = 'Type the barcode number.';
+            dialog.showModal();
+            codeInput.focus();
+
+            if (!('BarcodeDetector' in window) || !navigator.mediaDevices?.getUserMedia) {
+                return;
+            }
+
+            try {
+                const wanted = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'];
+                const supported = typeof BarcodeDetector.getSupportedFormats === 'function'
+                    ? (await BarcodeDetector.getSupportedFormats()).filter((format) => wanted.includes(format))
+                    : wanted;
+                const detector = new BarcodeDetector({ formats: supported.length ? supported : wanted });
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: 'environment' } },
+                    audio: false,
+                });
+                video.hidden = false;
+                status.textContent = 'Point the camera at the barcode, or type the number.';
+                video.srcObject = stream;
+                await video.play();
+
+                scanTimer = setInterval(async () => {
+                    if (video.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
+                        return;
+                    }
+
+                    try {
+                        const codes = await detector.detect(video);
+                        const code = (codes[0]?.rawValue || '').replace(/\D/g, '');
+
+                        if (code.length < 8) {
+                            return;
+                        }
+
+                        useCode(code);
+                    } catch {
+                        status.textContent = 'Could not read that frame. Hold the barcode steady, or type the number.';
+                    }
+                }, 300);
+            } catch {
+                video.hidden = true;
+                status.textContent = 'Type the barcode number.';
+                codeInput.focus();
+            }
+        });
+
+        lookupButton?.addEventListener('click', () => useCode(codeInput.value));
+        codeInput?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                useCode(codeInput.value);
+            }
+        });
+        document.querySelector('#barcode-close')?.addEventListener('click', () => dialog.close());
+        dialog.addEventListener('close', () => {
+            stopScan();
+            video.hidden = true;
+        });
+    }
 }

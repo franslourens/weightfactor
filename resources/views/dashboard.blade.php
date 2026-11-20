@@ -282,6 +282,19 @@
                 <input id="food-name" type="text" name="name" maxlength="120" value="{{ old('name') }}" placeholder="Search oats, Nutella, or a barcode" autocomplete="off" required>
                 <ul id="food-results" class="results" hidden></ul>
             </label>
+            <button id="scan-barcode" type="button">Scan barcode</button>
+            <dialog id="barcode-dialog">
+                <video id="barcode-video" playsinline autoplay muted hidden></video>
+                <p id="barcode-status" class="hint">Type the barcode number.</p>
+                <label>
+                    Barcode number
+                    <input id="barcode-code" type="text" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="3017620422003">
+                </label>
+                <div class="barcode-actions">
+                    <button id="barcode-lookup" type="button">Look up</button>
+                    <button id="barcode-close" type="button" class="text">Close</button>
+                </div>
+            </dialog>
             @error('name')
                 <p class="error">{{ $message }}</p>
             @enderror
@@ -313,7 +326,7 @@
                 @enderror
             @endforeach
             <button type="submit">Add food</button>
-            <p class="hint">Search fills calories, protein, carbs, and fat. Foods you or anyone else have logged show up here too.</p>
+            <p class="hint">Search fills calories, protein, carbs, and fat. Scan a barcode or type its number. Foods you or anyone else have logged show up here too.</p>
         </form>
     </section>
     @endif

@@ -233,6 +233,37 @@ svg {
     z-index: 4;
 }
 
+#barcode-dialog {
+    width: min(420px, calc(100% - 32px));
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--card);
+    color: var(--ink);
+}
+
+#barcode-dialog::backdrop { background: rgba(27, 25, 22, 0.45); }
+
+#barcode-video {
+    display: block;
+    width: 100%;
+    max-height: 280px;
+    border-radius: 12px;
+    background: #111;
+    object-fit: cover;
+}
+
+#barcode-dialog .hint { margin: 10px 0; }
+
+#barcode-dialog label { margin-top: 8px; }
+
+.barcode-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 12px;
+}
+
 .lookup:focus-within { z-index: 8; }
 
 .results {

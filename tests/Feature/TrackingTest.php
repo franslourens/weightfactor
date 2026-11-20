@@ -68,6 +68,7 @@ class TrackingTest extends TestCase
             ->assertDontSee('Save steps')
             ->assertDontSee('Save weight')
             ->assertDontSee('Add food')
+            ->assertDontSee('Scan barcode')
             ->assertDontSee('Update target')
             ->assertDontSee('Update body fat')
             ->assertDontSee('Remove');
@@ -77,6 +78,10 @@ class TrackingTest extends TestCase
             ->assertSee('Save steps')
             ->assertSee('Save weight')
             ->assertSee('Add food')
+            ->assertSee('Scan barcode')
+            ->assertSee('id="barcode-code"', false)
+            ->assertSee('Barcode number')
+            ->assertSee('Look up')
             ->assertSee('Update target')
             ->assertSee('Update body fat')
             ->assertSee('Remove');

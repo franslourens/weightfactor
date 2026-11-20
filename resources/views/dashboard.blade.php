@@ -284,7 +284,7 @@
             </label>
             <button id="scan-barcode" type="button">Scan barcode</button>
             <dialog id="barcode-dialog">
-                <video id="barcode-video" playsinline autoplay muted hidden></video>
+                <video id="barcode-video" playsinline webkit-playsinline autoplay muted hidden></video>
                 <p id="barcode-status" class="hint">Type the barcode number.</p>
                 <label>
                     Barcode number

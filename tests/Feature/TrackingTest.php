@@ -215,14 +215,14 @@ class TrackingTest extends TestCase
             ->assertDontSee('Oats with milk');
     }
 
-    public function test_food_can_be_logged_for_the_sunday_week_and_totals_it(): void
+    public function test_food_can_be_logged_for_the_monday_week_and_totals_it(): void
     {
         Carbon::setTestNow('2026-11-19');
 
         try {
             $this->asOwner()->post('/foods', [
-                'eaten_on' => '2026-11-15',
-                'name' => 'Sunday oats',
+                'eaten_on' => '2026-11-16',
+                'name' => 'Monday oats',
                 'calories' => 200,
                 'protein_g' => 10,
                 'carbs_g' => 30,
@@ -230,8 +230,8 @@ class TrackingTest extends TestCase
             ])->assertRedirect('/');
 
             $this->asOwner()->post('/foods', [
-                'eaten_on' => '2026-11-21',
-                'name' => 'Saturday chicken',
+                'eaten_on' => '2026-11-22',
+                'name' => 'Sunday chicken',
                 'calories' => 300,
                 'protein_g' => 40,
                 'carbs_g' => 0,
@@ -239,7 +239,7 @@ class TrackingTest extends TestCase
             ])->assertRedirect('/');
 
             $this->asOwner()->post('/foods', [
-                'eaten_on' => '2026-11-14',
+                'eaten_on' => '2026-11-15',
                 'name' => 'Last week',
                 'calories' => 900,
                 'protein_g' => 1,
@@ -248,8 +248,8 @@ class TrackingTest extends TestCase
             ])->assertSessionHasErrors('eaten_on');
 
             $this->asOwner()->post('/foods', [
-                'eaten_on' => '2026-11-22',
-                'name' => 'Next Sunday',
+                'eaten_on' => '2026-11-23',
+                'name' => 'Next Monday',
                 'calories' => 100,
                 'protein_g' => 1,
                 'carbs_g' => 1,
@@ -257,8 +257,8 @@ class TrackingTest extends TestCase
             ])->assertSessionHasErrors('eaten_on');
 
             $this->get('/')
-                ->assertSee('Sun, Nov 15')
-                ->assertSee('Sat, Nov 21')
+                ->assertSee('Mon, Nov 16')
+                ->assertSee('Sun, Nov 22')
                 ->assertSee('Protein 50.0 g')
                 ->assertSee('Carbs 30.0 g')
                 ->assertSee('Fat 12.0 g')

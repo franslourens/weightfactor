@@ -24,8 +24,8 @@ class FoodEntryController extends Controller
             'carbs_g' => ['required', 'numeric', 'min:0', 'max:1000'],
             'fat_g' => ['required', 'numeric', 'min:0', 'max:500'],
         ], [
-            'eaten_on.after_or_equal' => 'Choose a day from this Sunday through Saturday.',
-            'eaten_on.before_or_equal' => 'Choose a day from this Sunday through Saturday.',
+            'eaten_on.after_or_equal' => 'Choose a day from this Monday through Sunday.',
+            'eaten_on.before_or_equal' => 'Choose a day from this Monday through Sunday.',
         ]);
 
         FoodEntry::query()->create($validated);

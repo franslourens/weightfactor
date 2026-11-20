@@ -13,12 +13,12 @@ final class FoodWeek
     ) {}
 
     /**
-     * The current logging week, Sunday through the following Saturday.
+     * The current logging week, Monday through the following Sunday.
      */
     public static function current(?CarbonInterface $today = null): self
     {
         $today = Carbon::parse($today ?? now())->startOfDay();
-        $start = $today->copy()->startOfWeek(Carbon::SUNDAY);
+        $start = $today->copy()->startOfWeek(Carbon::MONDAY);
 
         return new self($start, $start->copy()->addDays(6));
     }

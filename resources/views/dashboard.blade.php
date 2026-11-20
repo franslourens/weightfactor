@@ -270,7 +270,7 @@
             @error('eaten_on')
                 <p class="error">{{ $message }}</p>
             @enderror
-            <p class="hint">Any day from this Sunday through Saturday.</p>
+            <p class="hint">Any day from this Monday through Sunday.</p>
             <label class="lookup">
                 Food
                 <input id="food-name" type="text" name="name" maxlength="120" value="{{ old('name') }}" placeholder="Search oats, Nutella, or a barcode" autocomplete="off" required>

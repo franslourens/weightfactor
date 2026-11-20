@@ -111,7 +111,10 @@ if (nameInput && results) {
     const lookupButton = document.querySelector('#barcode-lookup');
     let stream = null;
     let scanTimer = null;
-    let zxingReader = null;
+    let scanning = false;
+    let scanGeneration = 0;
+    const frame = document.createElement('canvas');
+    const frameContext = frame.getContext('2d', { willReadFrequently: true });
 
     const useCode = (raw) => {
         const code = String(raw).replace(/\D/g, '');
@@ -128,16 +131,10 @@ if (nameInput && results) {
     };
 
     const stopScan = () => {
+        scanGeneration += 1;
         clearInterval(scanTimer);
         scanTimer = null;
-
-        try {
-            zxingReader?.reset();
-        } catch {
-            // The reader may already be stopped.
-        }
-
-        zxingReader = null;
+        scanning = false;
         stream?.getTracks().forEach((track) => track.stop());
         stream = null;
 
@@ -153,53 +150,67 @@ if (nameInput && results) {
     };
 
     const loadZxing = () => new Promise((resolve, reject) => {
-        if (window.ZXingBrowser?.BrowserMultiFormatReader) {
-            resolve(window.ZXingBrowser);
+        if (window.ZXingWASM?.readBarcodes) {
+            resolve(window.ZXingWASM);
             return;
         }
 
         const script = document.createElement('script');
-        script.src = '/js/zxing-browser.min.js';
-        script.onload = () => resolve(window.ZXingBrowser);
+        script.src = '/js/zxing-wasm-reader.js';
+        script.onload = () => {
+            window.ZXingWASM.setZXingModuleOverrides({
+                locateFile: (file, prefix) => (file.endsWith('.wasm') ? '/js/zxing_reader.wasm' : prefix + file),
+            });
+            resolve(window.ZXingWASM);
+        };
         script.onerror = () => reject(new Error('zxing failed'));
         document.head.append(script);
     });
 
-    const readWithBarcodeDetector = async () => {
-        const wanted = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'];
-        const supported = typeof BarcodeDetector.getSupportedFormats === 'function'
-            ? (await BarcodeDetector.getSupportedFormats()).filter((format) => wanted.includes(format))
-            : wanted;
-        const detector = new BarcodeDetector({ formats: supported.length ? supported : wanted });
+    const readFrames = async () => {
+        const library = await loadZxing();
+        const generation = scanGeneration;
+        status.textContent = 'Hold the barcode steady in the frame.';
 
-        scanTimer = setInterval(async () => {
-            if (video.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
+        const scan = async () => {
+            if (generation !== scanGeneration || scanning) {
                 return;
             }
 
-            try {
-                const codes = await detector.detect(video);
-                const code = codes[0]?.rawValue || '';
+            if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) {
+                return;
+            }
 
-                if (code.replace(/\D/g, '').length >= 8) {
-                    useCode(code);
+            scanning = true;
+
+            try {
+                const scale = Math.min(1, 960 / video.videoWidth);
+                frame.width = Math.max(1, Math.round(video.videoWidth * scale));
+                frame.height = Math.max(1, Math.round(video.videoHeight * scale));
+                frameContext.drawImage(video, 0, 0, frame.width, frame.height);
+                const codes = await library.readBarcodes(frameContext.getImageData(0, 0, frame.width, frame.height), {
+                    formats: ['EAN13', 'EAN8', 'UPCA', 'UPCE', 'Code128'],
+                    tryHarder: true,
+                    tryRotate: true,
+                    tryInvert: true,
+                    maxNumberOfSymbols: 1,
+                });
+                const text = codes[0]?.text || '';
+
+                if (generation === scanGeneration && text.replace(/\D/g, '').length >= 8) {
+                    useCode(text);
                 }
             } catch {
-                status.textContent = 'Hold the barcode steady, or type the number.';
+                if (generation === scanGeneration) {
+                    status.textContent = 'Hold the barcode steady, or type the number.';
+                }
+            } finally {
+                scanning = false;
             }
-        }, 300);
-    };
+        };
 
-    const readWithZxing = async () => {
-        const library = await loadZxing();
-        zxingReader = new library.BrowserMultiFormatReader();
-        zxingReader.decodeFromVideoElementContinuously(video, (result) => {
-            const code = result?.getText?.() || result?.text || '';
-
-            if (code.replace(/\D/g, '').length >= 8) {
-                useCode(code);
-            }
-        });
+        await scan();
+        scanTimer = setInterval(scan, 250);
     };
 
     const openCamera = () => {
@@ -250,13 +261,9 @@ if (nameInput && results) {
                 }
 
                 try {
-                    if ('BarcodeDetector' in window) {
-                        await readWithBarcodeDetector();
-                    } else {
-                        await readWithZxing();
-                    }
+                    await readFrames();
                 } catch {
-                    status.textContent = 'Point the camera at the barcode, or type the number.';
+                    status.textContent = 'The scanner could not start. Type the barcode number.';
                 }
             }).catch(() => {
                 const secure = window.isSecureContext

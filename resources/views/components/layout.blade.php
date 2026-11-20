@@ -12,6 +12,9 @@
         <div class="session">
             <p>Calories and weight, day by day.</p>
             @auth
+                @if (auth()->user()->isOwner())
+                    <a href="{{ route('admin') }}">Admin</a>
+                @endif
                 <a href="{{ route('account.edit') }}">Account</a>
                 @unless (auth()->user()->isOwner())
                     <a href="{{ auth()->user()->slug ? route('profile.show', auth()->user()) : route('profile.mine') }}">Your profile</a>

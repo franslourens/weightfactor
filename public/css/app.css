@@ -481,6 +481,36 @@ main { padding-bottom: 40px; }
     opacity: 1;
 }
 
+.users-wrap { overflow-x: auto; }
+
+.users {
+    width: 100%;
+    margin-top: 14px;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.users th,
+.users td {
+    padding: 8px 16px 8px 0;
+    border-top: 1px solid var(--line);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.users th {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.users td:last-child,
+.users th:last-child { padding-right: 0; }
+
+.users a { color: inherit; }
+
+.users .online { color: var(--green); font-weight: 700; }
+
 select {
     width: 100%;
     padding: 10px 12px;

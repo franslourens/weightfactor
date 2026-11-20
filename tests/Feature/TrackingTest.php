@@ -15,6 +15,7 @@ use App\Support\BodyPlan;
 use App\Support\PastMonth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -1082,5 +1083,63 @@ class TrackingTest extends TestCase
 
         $this->get('/')->assertDontSee('70.25 kg');
         $this->get('/u/missing-person')->assertNotFound();
+    }
+
+    public function test_only_the_owner_can_see_who_is_logged_in(): void
+    {
+        Carbon::setTestNow('2026-11-20 15:50:00');
+
+        $online = User::factory()->create([
+            'name' => 'Zoe Online',
+            'email' => 'zoe@example.com',
+        ]);
+        $offline = User::factory()->create([
+            'name' => 'Amy Offline',
+            'email' => 'amy@example.com',
+        ]);
+
+        DB::table('sessions')->insert([
+            [
+                'id' => 'live-session',
+                'user_id' => $online->id,
+                'ip_address' => '127.0.0.1',
+                'user_agent' => 'Test',
+                'payload' => 'test',
+                'last_activity' => now()->subMinutes(10)->timestamp,
+            ],
+            [
+                'id' => 'stale-session',
+                'user_id' => $offline->id,
+                'ip_address' => '127.0.0.1',
+                'user_agent' => 'Test',
+                'payload' => 'test',
+                'last_activity' => now()->subMinutes(((int) config('session.lifetime')) + 5)->timestamp,
+            ],
+        ]);
+
+        $this->get('/admin')->assertRedirect('/login');
+
+        $this->actingAs($online)->get('/admin')->assertForbidden();
+        $this->actingAs($online)->get('/')->assertDontSee('href="'.route('admin').'"', false);
+
+        $page = $this->asOwner()->get('/admin');
+        $page->assertOk()
+            ->assertSee('Users')
+            ->assertSee('1 logged in')
+            ->assertSee('Zoe Online')
+            ->assertSee('zoe@example.com')
+            ->assertSee('Amy Offline')
+            ->assertSee('amy@example.com')
+            ->assertSee($this->owner->email)
+            ->assertSee('Logged in')
+            ->assertSee('Offline')
+            ->assertSee('Nov 20, 2026 3:40 PM');
+
+        $html = $page->getContent();
+        $this->assertLessThan(strpos($html, 'Amy Offline'), strpos($html, 'Zoe Online'));
+
+        $this->get('/')->assertSee('href="'.route('admin').'"', false);
+
+        Carbon::setTestNow();
     }
 }

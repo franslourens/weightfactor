@@ -150,15 +150,15 @@
                 </label>
                 <label>
                     Height (cm)
-                    <input type="number" name="height_cm" min="120" max="230" step="0.1" value="{{ old('height_cm', $profile->height_cm) }}" @disabled(auth()->guest()) @required(auth()->check())>
+                    <input type="number" name="height_cm" min="120" max="230" step="any" value="{{ old('height_cm', $profile->height_cm) }}" @disabled(auth()->guest()) @required(auth()->check())>
                 </label>
                 <label>
                     Body fat %
-                    <input type="number" name="body_fat_percent" min="3" max="60" step="0.1" value="{{ old('body_fat_percent', $profile->body_fat_percent) }}" @disabled(auth()->guest()) @required(auth()->check())>
+                    <input type="number" name="body_fat_percent" min="3" max="60" step="any" value="{{ old('body_fat_percent', $profile->body_fat_percent) }}" @disabled(auth()->guest()) @required(auth()->check())>
                 </label>
                 <label>
                     Target body fat %
-                    <input type="number" name="target_body_fat_percent" min="3" max="60" step="0.1" value="{{ old('target_body_fat_percent', $profile->target_body_fat_percent) }}" @disabled(auth()->guest()) @required(auth()->check())>
+                    <input type="number" name="target_body_fat_percent" min="3" max="60" step="any" value="{{ old('target_body_fat_percent', $profile->target_body_fat_percent) }}" @disabled(auth()->guest()) @required(auth()->check())>
                 </label>
                 <label>
                     Activity
@@ -174,7 +174,7 @@
                         $weeklyLossValue = old('weekly_loss_kg', $profile->weekly_loss_kg);
                         $weeklyLossValue = rtrim(rtrim(number_format((float) $weeklyLossValue, 4, '.', ''), '0'), '.');
                     @endphp
-                    <input type="number" name="weekly_loss_kg" min="0" max="2" step="0.0001" value="{{ $weeklyLossValue === '' ? '0' : $weeklyLossValue }}" @disabled(auth()->guest()) @required(auth()->check())>
+                    <input type="number" name="weekly_loss_kg" min="0" max="2" step="any" value="{{ $weeklyLossValue === '' ? '0' : $weeklyLossValue }}" @disabled(auth()->guest()) @required(auth()->check())>
                 </label>
                 @auth
                     <button type="submit">Update target</button>

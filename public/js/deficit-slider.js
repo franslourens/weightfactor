@@ -11,6 +11,7 @@ if (slider && planData) {
     const pace = document.querySelector('#plan-pace');
     const todayTarget = document.querySelector('#today-target');
     const todayBalance = document.querySelector('#today-balance');
+    const outlook = document.querySelector('#month-outlook');
     const weeklyInput = document.querySelector('input[name="weekly_loss_kg"]');
 
     const formatInt = (value) => Math.round(value).toLocaleString('en-US');
@@ -92,6 +93,13 @@ if (slider && planData) {
             todayBalance.textContent = remaining >= 0
                 ? `${formatInt(remaining)} left`
                 : `${formatInt(Math.abs(remaining))} over`;
+        }
+
+        if (outlook) {
+            const actual = Math.round(plan.tdee - calorieTarget);
+            const kind = actual < 0 ? 'surplus' : 'deficit';
+            const nextWeight = plan.weightKg - (actual * 30 / kcalPerKg);
+            outlook.textContent = `At ${formatFixed(plan.weightKg, 2)} kg the actual ${kind} is ${formatInt(Math.abs(actual))} kcal. In 30 days the scale would read about ${formatFixed(nextWeight, 2)} kg.`;
         }
     };
 

@@ -109,4 +109,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(BodyFatEntry::class);
     }
+
+    public function steps(): HasMany
+    {
+        return $this->hasMany(StepEntry::class);
+    }
 }

@@ -7,10 +7,12 @@ use App\Mail\Welcome;
 use App\Models\BodyFatEntry;
 use App\Models\FoodEntry;
 use App\Models\Profile;
+use App\Models\StepEntry;
 use App\Models\User;
 use App\Models\WeightEntry;
 use App\Support\BodyFat;
 use App\Support\BodyPlan;
+use App\Support\PastMonth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -60,6 +62,9 @@ class TrackingTest extends TestCase
             ->assertSee('Body fat %')
             ->assertSee('Loss per week (kg)')
             ->assertSee('Light exercise, 1–3 workouts a week')
+            ->assertSee('Steps')
+            ->assertDontSee('name="steps[', false)
+            ->assertDontSee('Save steps')
             ->assertDontSee('Save weight')
             ->assertDontSee('Add food')
             ->assertDontSee('Update target')
@@ -67,6 +72,8 @@ class TrackingTest extends TestCase
             ->assertDontSee('Remove');
 
         $this->asOwner()->get('/')
+            ->assertSee('name="steps[', false)
+            ->assertSee('Save steps')
             ->assertSee('Save weight')
             ->assertSee('Add food')
             ->assertSee('Update target')
@@ -76,6 +83,11 @@ class TrackingTest extends TestCase
 
     public function test_guests_cannot_change_weight_food_or_target(): void
     {
+        $this->post('/steps', [
+            'recorded_on' => '2026-11-20',
+            'steps' => 8000,
+        ])->assertRedirect('/login');
+
         $this->post('/weights', [
             'recorded_on' => '2026-11-19',
             'weight_kg' => '99.55',
@@ -180,6 +192,124 @@ class TrackingTest extends TestCase
         $this->post('/logout')->assertRedirect('/');
 
         $this->get('/')->assertSee('Log in')->assertDontSee('Save weight');
+    }
+
+    public function test_each_person_keeps_their_own_steps_and_can_look_back_to_signup(): void
+    {
+        Carbon::setTestNow('2026-11-20');
+        $this->owner->forceFill(['created_at' => '2026-09-15 08:00:00'])->save();
+
+        try {
+            $dashboard = $this->get('/');
+            $dashboard->assertOk()
+                ->assertSee('November 2026')
+                ->assertSee('October 2026')
+                ->assertSee('/steps/2026/10', false)
+                ->assertDontSee('name="steps[', false)
+                ->assertDontSee('Save steps');
+            $this->assertGreaterThan(
+                strpos($dashboard->getContent(), 'Calories, last 14 days'),
+                strpos($dashboard->getContent(), '<h2>Steps</h2>')
+            );
+
+            $this->get('/?steps=2026-10')->assertRedirect('/steps/2026/10');
+
+            $this->asOwner()->get('/steps/2026/10')
+                ->assertSee('October 2026')
+                ->assertSee('September 2026')
+                ->assertSee('November 2026')
+                ->assertDontSee('name="steps[', false)
+                ->assertDontSee('Save steps');
+
+            $this->get('/steps/2026/8')->assertRedirect('/steps/2026/9');
+
+            $this->asOwner()->get('/steps/2026/9')
+                ->assertSee('September 2026')
+                ->assertDontSee('August 2026');
+
+            $current = $this->asOwner()->get('/');
+            $this->assertSame(1, substr_count($current->getContent(), 'Save steps'));
+
+            $this->asOwner()->from('/')->post('/steps', [
+                'steps' => [
+                    '2026-11-01' => 8000,
+                    '2026-11-02' => '',
+                    '2026-11-03' => 1200,
+                ],
+            ])->assertRedirect('/')
+                ->assertSessionHas('status', 'Steps saved.');
+
+            $this->asOwner()->from('/')->post('/steps', [
+                'steps' => [
+                    '2026-11-01' => 8420,
+                    '2026-11-02' => '',
+                    '2026-11-03' => 1200,
+                ],
+            ])->assertSessionHas('status', 'Steps saved.');
+
+            $this->assertSame(2, StepEntry::query()->count());
+            $this->assertNull(StepEntry::query()->whereDate('recorded_on', '2026-11-02')->first());
+
+            $this->asOwner()->post('/steps', [
+                'steps' => [
+                    '2026-10-31' => 1000,
+                ],
+            ])->assertSessionHasErrors('steps');
+
+            auth()->logout();
+
+            $this->get('/')->assertSee('8,420')->assertDontSee('name="steps[', false);
+
+            $this->post('/register', [
+                'name' => 'Alex',
+                'email' => 'alex@example.com',
+                'password' => 'secret-pass',
+                'password_confirmation' => 'secret-pass',
+            ]);
+
+            $alex = auth()->user();
+            $alex->forceFill(['created_at' => '2026-09-03 08:00:00'])->save();
+
+            $this->from('/u/'.$alex->slug)->post('/steps', [
+                'steps' => [
+                    '2026-11-02' => 1000,
+                    '2026-11-04' => '',
+                ],
+            ])->assertRedirect('/u/'.$alex->slug)
+                ->assertSessionHas('status', 'Steps saved.');
+
+            $this->post('/steps', [
+                'steps' => [
+                    '2026-09-03' => 500,
+                ],
+            ])->assertSessionHasErrors('steps');
+
+            $this->get('/u/'.$alex->slug)
+                ->assertSee('1,000')
+                ->assertSee('Save steps')
+                ->assertDontSee('8,420');
+
+            $this->get('/u/'.$alex->slug.'?steps=2026-09')
+                ->assertRedirect('/u/'.$alex->slug.'/steps/2026/9');
+
+            $this->get('/u/'.$alex->slug.'/steps/2026/9')
+                ->assertSee('September 2026')
+                ->assertSee('/u/'.$alex->slug.'/steps/2026/10', false)
+                ->assertDontSee('Save steps');
+
+            auth()->logout();
+
+            $this->get('/')->assertSee('8,420');
+            $this->get('/u/'.$alex->slug)
+                ->assertSee('1,000')
+                ->assertDontSee('8,420')
+                ->assertDontSee('Save steps');
+
+            $this->assertSame($this->owner->id, StepEntry::query()->where('steps', 8420)->value('user_id'));
+            $this->assertSame($alex->id, StepEntry::query()->where('steps', 1000)->value('user_id'));
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_a_weigh_in_replaces_the_same_day(): void
@@ -335,6 +465,10 @@ class TrackingTest extends TestCase
         $this->assertSame([5 => 87, 10 => 91, 15 => 96], $plan->muscularPotentialKg());
 
         $this->assertSame(550, $plan->nearestDeficit());
+        $this->assertSame(550, $plan->actualDailyDeficit());
+        $this->assertEqualsWithDelta(97.41, $plan->weightAfterDays(30), 0.01);
+        $this->assertSame(1208, $plan->withDeficit(1500)->actualDailyDeficit());
+        $this->assertEqualsWithDelta(94.84, $plan->withDeficit(1500)->weightAfterDays(30), 0.01);
         $this->assertSame(2698, $plan->withDeficit(10)->calorieTarget());
         $this->assertGreaterThan($plan->withDeficit(550)->weeks(), $plan->withDeficit(10)->weeks());
         $this->assertSame(2208, $plan->withDeficit(500)->calorieTarget());
@@ -366,6 +500,8 @@ class TrackingTest extends TestCase
             ->assertSee('2,158 kcal')
             ->assertSee('2,708 kcal')
             ->assertSee('Calorie deficit')
+            ->assertSee($plan->monthOutlook())
+            ->assertDontSee('Over the last', false)
             ->assertSee('id="deficit-slider"', false)
             ->assertSee('max="1000" step="1"', false)
             ->assertDontSee('deficit-tick', false)
@@ -378,6 +514,59 @@ class TrackingTest extends TestCase
             ->assertSee('87 kg')
             ->assertSee('91 kg')
             ->assertSee('96 kg');
+    }
+
+    public function test_the_past_month_shows_the_weight_lost_and_the_deficit_it_implies(): void
+    {
+        WeightEntry::query()->create([
+            'user_id' => $this->owner->id,
+            'recorded_on' => '2026-10-20',
+            'weight_kg' => 101.00,
+        ]);
+        WeightEntry::query()->create([
+            'user_id' => $this->owner->id,
+            'recorded_on' => '2026-11-19',
+            'weight_kg' => 99.55,
+        ]);
+
+        $past = PastMonth::fromWeights($this->owner->weights()->orderBy('recorded_on')->get());
+
+        $this->assertSame(30, $past->days);
+        $this->assertEqualsWithDelta(1.45, $past->weightLostKg(), 0.001);
+        $this->assertSame(372, $past->dailyDeficit());
+        $this->assertSame('Over the last 30 days you lost 1.45 kg, a 372 kcal deficit.', $past->sentence());
+
+        $this->get('/')
+            ->assertSee('Over the last 30 days you lost 1.45 kg, a 372 kcal deficit.')
+            ->assertSee('id="past-month"', false);
+
+        WeightEntry::query()->create([
+            'user_id' => $this->owner->id,
+            'recorded_on' => '2026-10-10',
+            'weight_kg' => 102.00,
+        ]);
+        WeightEntry::query()->create([
+            'user_id' => $this->owner->id,
+            'recorded_on' => '2026-11-09',
+            'weight_kg' => 100.00,
+        ]);
+
+        $anchored = PastMonth::fromWeights($this->owner->weights()->orderBy('recorded_on')->get());
+        $this->assertSame(30, $anchored->days);
+        $this->assertEqualsWithDelta(1.45, $anchored->weightLostKg(), 0.001);
+
+        $gained = PastMonth::fromWeights(collect([
+            (object) ['recorded_on' => '2026-10-20', 'weight_kg' => 99.55],
+            (object) ['recorded_on' => '2026-11-19', 'weight_kg' => 100.55],
+        ]));
+        $this->assertSame('Over the last 30 days you gained 1.00 kg, a 257 kcal surplus.', $gained->sentence());
+
+        $short = PastMonth::fromWeights(collect([
+            (object) ['recorded_on' => '2026-11-09', 'weight_kg' => 100.00],
+            (object) ['recorded_on' => '2026-11-19', 'weight_kg' => 99.55],
+        ]));
+        $this->assertSame(10, $short->days);
+        $this->assertSame(347, $short->dailyDeficit());
     }
 
     public function test_a_saved_calorie_deficit_updates_the_weeks_and_calories(): void

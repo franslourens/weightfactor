@@ -117,15 +117,38 @@ final class BodyPlan
     /**
      * Figures the deficit slider needs in order to update weeks and calories.
      *
-     * @return array{weightToLose: float, tdee: float, floor: int}
+     * @return array{weightKg: float, weightToLose: float, tdee: float, floor: int}
      */
     public function deficitInputs(): array
     {
         return [
+            'weightKg' => $this->weightKg,
             'weightToLose' => $this->weightToLoseKg(),
             'tdee' => $this->tdee(),
             'floor' => $this->calorieFloor(),
         ];
+    }
+
+    /**
+     * Calories under maintenance at this weight. Negative means a surplus.
+     * The calorie floor can make this smaller than the chosen deficit.
+     */
+    public function actualDailyDeficit(): int
+    {
+        return (int) round($this->tdee() - $this->calorieTarget());
+    }
+
+    public function weightAfterDays(int $days): float
+    {
+        return $this->weightKg - ($this->actualDailyDeficit() * $days / self::KCAL_PER_KG);
+    }
+
+    public function monthOutlook(): string
+    {
+        $gap = $this->actualDailyDeficit();
+        $kind = $gap < 0 ? 'surplus' : 'deficit';
+
+        return 'At '.number_format($this->weightKg, 2).' kg the actual '.$kind.' is '.number_format(abs($gap)).' kcal. In 30 days the scale would read about '.number_format($this->weightAfterDays(30), 2).' kg.';
     }
 
     public function timeline(): string

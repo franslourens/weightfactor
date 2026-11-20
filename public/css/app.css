@@ -280,6 +280,66 @@ main { padding-bottom: 40px; }
 
 .plan { margin-top: 16px; }
 
+.steps { margin-top: 16px; }
+
+.step-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.step-nav a {
+    color: var(--ink);
+    font-size: 14px;
+    text-decoration: none;
+}
+
+.step-nav .meta { margin: 0; }
+
+.step-month {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.step-head {
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+}
+
+.step-day {
+    display: grid;
+    gap: 6px;
+    align-content: start;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+
+.step-day.today { border-color: var(--ink); }
+
+.step-day span {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.step-day strong { font-variant-numeric: tabular-nums; }
+
+.steps form {
+    display: grid;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.steps form .step-month { margin-top: 0; }
+
+.step-day input { padding: 6px 8px; }
+
 .facts {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -432,6 +492,7 @@ select {
 }
 
 @media (max-width: 760px) {
-    .stats, .grid, .facts, .profile, .macro-fields, .reference, .body-fat { grid-template-columns: 1fr; }
+    .stats, .grid, .facts, .profile, .macro-fields, .reference, .body-fat, .step-month { grid-template-columns: 1fr; }
+    .step-head, .step-pad { display: none; }
     .top { display: block; }
 }

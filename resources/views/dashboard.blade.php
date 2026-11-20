@@ -151,6 +151,10 @@
                         </div>
                         <input id="deficit-slider" type="range" min="0" max="{{ \App\Support\BodyPlan::DEFICIT_MAX }}" step="1" value="{{ $plan->nearestDeficit() }}">
                         <p class="hint">Weeks and the calories you need follow this deficit.</p>
+                        @if ($pastMonth)
+                            <p class="hint" id="past-month">{{ $pastMonth }}</p>
+                        @endif
+                        <p class="hint" id="month-outlook">{{ $plan->monthOutlook() }}</p>
                     </div>
                 @endif
                 <label>
@@ -377,6 +381,11 @@
             @endif
         </article>
     </section>
+
+    @if ($stepMonth)
+        @include('partials.steps')
+    @endif
+
     @if ($canEdit)
         @push('scripts')
             <script src="{{ asset('js/food-search.js') }}?v={{ filemtime(public_path('js/food-search.js')) }}"></script>

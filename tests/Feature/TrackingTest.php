@@ -2,12 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Models\BodyFatEntry;
 use App\Models\FoodEntry;
 use App\Models\Profile;
 use App\Models\User;
 use App\Models\WeightEntry;
 use App\Support\BodyFat;
+use App\Support\BodyPlan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -117,7 +120,7 @@ class TrackingTest extends TestCase
         $profile = Profile::query()->first();
         $this->assertSame('21.4', $profile->body_fat_percent);
         $this->assertSame('20.0', $profile->target_body_fat_percent);
-        $this->assertSame(2, \App\Models\BodyFatEntry::query()->count());
+        $this->assertSame(2, BodyFatEntry::query()->count());
         $this->get('/')
             ->assertSee('21.4%')
             ->assertSee('23.8%');
@@ -214,7 +217,7 @@ class TrackingTest extends TestCase
 
     public function test_food_can_be_logged_for_the_sunday_week_and_totals_it(): void
     {
-        \Illuminate\Support\Carbon::setTestNow('2026-11-19');
+        Carbon::setTestNow('2026-11-19');
 
         try {
             $this->asOwner()->post('/foods', [
@@ -261,7 +264,7 @@ class TrackingTest extends TestCase
                 ->assertSee('Fat 12.0 g')
                 ->assertDontSee('Last week');
         } finally {
-            \Illuminate\Support\Carbon::setTestNow();
+            Carbon::setTestNow();
         }
     }
 
@@ -302,7 +305,7 @@ class TrackingTest extends TestCase
             'weight_kg' => '99.55',
         ])->assertRedirect('/');
 
-        $plan = \App\Support\BodyPlan::fromProfile(\App\Models\Profile::query()->first(), 99.55);
+        $plan = BodyPlan::fromProfile(Profile::query()->first(), 99.55);
 
         $this->assertEqualsWithDelta(94.82, $plan->targetWeightKg(), 0.01);
         $this->assertSame(2158, $plan->calorieTarget());
@@ -317,10 +320,41 @@ class TrackingTest extends TestCase
         $this->assertSame('Overweight', $plan->bmiCategory());
         $this->assertSame([5 => 87, 10 => 91, 15 => 96], $plan->muscularPotentialKg());
 
+        $this->assertSame(550, $plan->nearestDeficit());
+        $this->assertSame(2698, $plan->withDeficit(10)->calorieTarget());
+        $this->assertGreaterThan($plan->withDeficit(550)->weeks(), $plan->withDeficit(10)->weeks());
+        $this->assertSame(2208, $plan->withDeficit(500)->calorieTarget());
+        $this->assertSame(1708, $plan->withDeficit(1000)->calorieTarget());
+        $this->assertSame(1500, $plan->withDeficit(1500)->calorieTarget());
+        $this->assertTrue($plan->withDeficit(1500)->calorieTargetIsFloored());
+        $this->assertGreaterThan($plan->withDeficit(1000)->weeks(), $plan->withDeficit(500)->weeks());
+        $this->assertSame(0.0, $plan->withDeficit(0)->weeks());
+
+        foreach ([500, 1000, 1500, 2000] as $deficit) {
+            $projected = $plan->withDeficit($deficit);
+            $stored = (float) number_format($projected->weeklyLossKg, 4, '.', '');
+            $reloaded = new BodyPlan(
+                $plan->weightKg,
+                $plan->bodyFatPercent,
+                $plan->targetBodyFatPercent,
+                $plan->sex,
+                $plan->age,
+                $plan->heightCm,
+                $plan->activity,
+                $stored,
+            );
+
+            $this->assertSame($projected->calorieTarget(), $reloaded->calorieTarget());
+        }
+
         $this->get('/')
             ->assertSee('94.82 kg')
             ->assertSee('2,158 kcal')
             ->assertSee('2,708 kcal')
+            ->assertSee('Calorie deficit')
+            ->assertSee('id="deficit-slider"', false)
+            ->assertSee('max="1000" step="1"', false)
+            ->assertDontSee('deficit-tick', false)
             ->assertSee('23.8%')
             ->assertSee('20.0%')
             ->assertSee('75–85 kg')
@@ -330,6 +364,34 @@ class TrackingTest extends TestCase
             ->assertSee('87 kg')
             ->assertSee('91 kg')
             ->assertSee('96 kg');
+    }
+
+    public function test_a_saved_calorie_deficit_updates_the_weeks_and_calories(): void
+    {
+        $this->asOwner()->post('/weights', [
+            'recorded_on' => '2026-11-19',
+            'weight_kg' => '99.55',
+        ])->assertRedirect('/');
+
+        $plan = BodyPlan::fromProfile(Profile::query()->first(), 99.55);
+        $projected = $plan->withDeficit(1000);
+
+        $this->asOwner()->put('/profile', [
+            'sex' => 'male',
+            'age' => 40,
+            'height_cm' => 187,
+            'body_fat_percent' => 23.8,
+            'target_body_fat_percent' => 20,
+            'activity' => 'light',
+            'weekly_loss_kg' => number_format($projected->weeklyLossKg, 4, '.', ''),
+        ])->assertRedirect('/')
+            ->assertSessionHasNoErrors();
+
+        $saved = BodyPlan::fromProfile(Profile::query()->first(), 99.55);
+        $this->assertSame('0.9091', Profile::query()->first()->weekly_loss_kg);
+        $this->get('/')
+            ->assertSee('1,708 kcal')
+            ->assertSee($saved->timeline());
     }
 
     public function test_food_lookup_includes_calories_and_macros(): void

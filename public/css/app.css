@@ -339,14 +339,52 @@ main { padding-bottom: 40px; }
 
 .profile {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: start;
     gap: 10px;
     margin-top: 18px;
     padding-top: 16px;
     border-top: 1px solid var(--line);
 }
 
+.profile > label {
+    min-width: 0;
+    align-items: start;
+}
+
+.profile input:not([type="range"]),
+.profile select {
+    height: 42px;
+    min-width: 0;
+    max-width: 100%;
+}
+
 .profile button { align-self: end; }
+
+.deficit {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.deficit-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.deficit-heading label { font-size: 14px; }
+
+.deficit-heading strong { font-variant-numeric: tabular-nums; }
+
+.profile input[type="range"] {
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    accent-color: var(--green);
+}
 
 .body-fat {
     display: grid;

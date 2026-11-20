@@ -11,6 +11,8 @@ final class BodyPlan
      */
     public const KCAL_PER_KG = 7700;
 
+    public const DEFICIT_MAX = 1000;
+
     public function __construct(
         public readonly float $weightKg,
         public readonly float $bodyFatPercent,
@@ -20,6 +22,7 @@ final class BodyPlan
         public readonly float $heightCm,
         public readonly string $activity,
         public readonly float $weeklyLossKg,
+        public readonly ?int $deficitKcal = null,
     ) {}
 
     public static function fromProfile(Profile $profile, float $weightKg): self
@@ -81,7 +84,95 @@ final class BodyPlan
 
     public function dailyAdjustment(): float
     {
+        if ($this->deficitKcal !== null) {
+            return (float) $this->deficitKcal;
+        }
+
         return $this->weeklyLossKg * self::KCAL_PER_KG / 7;
+    }
+
+    /**
+     * Same plan at a daily calorie deficit, in 500 kcal steps.
+     */
+    public function withDeficit(int $kcal): self
+    {
+        return new self(
+            weightKg: $this->weightKg,
+            bodyFatPercent: $this->bodyFatPercent,
+            targetBodyFatPercent: $this->targetBodyFatPercent,
+            sex: $this->sex,
+            age: $this->age,
+            heightCm: $this->heightCm,
+            activity: $this->activity,
+            weeklyLossKg: $kcal * 7 / self::KCAL_PER_KG,
+            deficitKcal: $kcal,
+        );
+    }
+
+    public function nearestDeficit(): int
+    {
+        return max(0, min(self::DEFICIT_MAX, (int) round($this->dailyAdjustment())));
+    }
+
+    /**
+     * Figures the deficit slider needs in order to update weeks and calories.
+     *
+     * @return array{weightToLose: float, tdee: float, floor: int}
+     */
+    public function deficitInputs(): array
+    {
+        return [
+            'weightToLose' => $this->weightToLoseKg(),
+            'tdee' => $this->tdee(),
+            'floor' => $this->calorieFloor(),
+        ];
+    }
+
+    public function timeline(): string
+    {
+        $weekly = $this->effectiveWeeklyLossKg();
+
+        if ($weekly <= 0) {
+            return 'holding your weight';
+        }
+
+        return 'about '.number_format($this->weeks(), 1).' weeks at '.number_format($weekly, 2).' kg/week';
+    }
+
+    public function eatNote(): string
+    {
+        if ($this->effectiveWeeklyLossKg() <= 0 || abs($this->weightToLoseKg()) <= 0.05) {
+            return 'per day to hold your weight';
+        }
+
+        if ($this->weightToLoseKg() < 0) {
+            return 'per day to gain weight at that rate';
+        }
+
+        return 'per day to lose weight at that rate';
+    }
+
+    public function paceSentence(int $deficit): string
+    {
+        if (abs($this->weightToLoseKg()) <= 0.05) {
+            return 'You are already at the target weight, so the eating target is '.number_format($this->calorieTarget()).' kcal.';
+        }
+
+        if ($deficit === 0) {
+            return 'A 0 kcal deficit holds your weight, so the eating target is '.number_format($this->calorieTarget()).' kcal.';
+        }
+
+        if ($this->calorieTargetIsFloored()) {
+            return 'A '.number_format($deficit).' kcal deficit is capped so the target stays at '.number_format($this->calorieFloor()).' kcal, about '.number_format($this->effectiveWeeklyLossKg(), 2).' kg a week.';
+        }
+
+        $gaining = $this->weightToLoseKg() < 0;
+
+        return ($gaining ? 'Gaining ' : 'Losing ')
+            .number_format($this->weeklyLossKg, 2)
+            .' kg a week is about a '.number_format($deficit)
+            .' kcal daily '.($gaining ? 'surplus' : 'deficit')
+            .', so the eating target is '.number_format($this->calorieTarget()).' kcal.';
     }
 
     public function calorieTarget(): int
@@ -105,11 +196,26 @@ final class BodyPlan
 
     public function weeks(): float
     {
-        if ($this->weeklyLossKg <= 0) {
+        $weekly = $this->effectiveWeeklyLossKg();
+
+        if ($weekly <= 0) {
             return 0;
         }
 
-        return abs($this->weightToLoseKg()) / $this->weeklyLossKg;
+        return abs($this->weightToLoseKg()) / $weekly;
+    }
+
+    /**
+     * Weekly change the eating target can actually produce.
+     * A large deficit is limited by the calorie floor.
+     */
+    private function effectiveWeeklyLossKg(): float
+    {
+        if ($this->calorieTargetIsFloored()) {
+            return max(0, $this->tdee() - $this->calorieFloor()) * 7 / self::KCAL_PER_KG;
+        }
+
+        return max(0, $this->weeklyLossKg);
     }
 
     /**

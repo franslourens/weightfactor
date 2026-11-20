@@ -21,8 +21,8 @@
                 {{ now()->format('l, M j') }}
                 @if ($plan)
                     @php $remaining = $plan->calorieTarget() - $todayCalories; @endphp
-                    · target {{ number_format($plan->calorieTarget()) }}
-                    · {{ $remaining >= 0 ? number_format($remaining).' left' : number_format(abs($remaining)).' over' }}
+                    · target <span id="today-target">{{ number_format($plan->calorieTarget()) }}</span>
+                    · <span id="today-balance" data-eaten="{{ $todayCalories }}">{{ $remaining >= 0 ? number_format($remaining).' left' : number_format(abs($remaining)).' over' }}</span>
                 @endif
             </p>
             <p class="meta">Protein {{ number_format($todayProtein, 1) }} g · Carbs {{ number_format($todayCarbs, 1) }} g · Fat {{ number_format($todayFat, 1) }} g</p>
@@ -49,12 +49,12 @@
                 <div>
                     <span>To lose</span>
                     <strong>{{ number_format($plan->weightToLoseKg(), 2) }} kg</strong>
-                    <p>about {{ number_format($plan->weeks(), 1) }} weeks at {{ number_format($plan->weeklyLossKg, 2) }} kg/week</p>
+                    <p id="plan-weeks">{{ $plan->timeline() }}</p>
                 </div>
                 <div>
                     <span>Eat</span>
-                    <strong>{{ number_format($plan->calorieTarget()) }} kcal</strong>
-                    <p>per day to lose weight at that rate</p>
+                    <strong id="plan-calories">{{ number_format($plan->calorieTarget()) }} kcal</strong>
+                    <p id="plan-eat-note">{{ $plan->eatNote() }}</p>
                 </div>
                 <div>
                     <span>Maintenance</span>
@@ -69,10 +69,7 @@
                 {{ number_format($plan->targetWeightKg(), 2) }} kg.
                 Resting metabolism is about {{ number_format($plan->bmr()) }} kcal.
                 {{ $plan->activityLabel() }} puts maintenance near {{ number_format($plan->tdee()) }} kcal.
-                Losing {{ number_format($plan->weeklyLossKg, 2) }} kg a week is about a {{ number_format($plan->dailyAdjustment()) }} kcal daily deficit, so the eating target is {{ number_format($plan->calorieTarget()) }} kcal.
-                @if ($plan->calorieTargetIsFloored())
-                    The deficit was capped so the target stays at {{ $plan->sex === 'male' ? '1,500' : '1,200' }} kcal.
-                @endif
+                <span id="plan-pace">{{ $plan->paceSentence((int) round($plan->dailyAdjustment())) }}</span>
             </p>
             <div class="reference">
                 <div>
@@ -130,6 +127,16 @@
                     @csrf
                     @method('PUT')
                 @endauth
+                @if ($plan)
+                    <div class="deficit">
+                        <div class="deficit-heading">
+                            <label for="deficit-slider">Calorie deficit</label>
+                            <strong id="deficit-readout">{{ number_format($plan->dailyAdjustment()) }} kcal</strong>
+                        </div>
+                        <input id="deficit-slider" type="range" min="0" max="{{ \App\Support\BodyPlan::DEFICIT_MAX }}" step="1" value="{{ $plan->nearestDeficit() }}">
+                        <p class="hint">Weeks and the calories you need follow this deficit.</p>
+                    </div>
+                @endif
                 <label>
                     Sex
                     <select name="sex" @disabled(auth()->guest())>
@@ -163,7 +170,11 @@
                 </label>
                 <label>
                     Loss per week (kg)
-                    <input type="number" name="weekly_loss_kg" min="0.1" max="1" step="0.05" value="{{ old('weekly_loss_kg', $profile->weekly_loss_kg) }}" @disabled(auth()->guest()) @required(auth()->check())>
+                    @php
+                        $weeklyLossValue = old('weekly_loss_kg', $profile->weekly_loss_kg);
+                        $weeklyLossValue = rtrim(rtrim(number_format((float) $weeklyLossValue, 4, '.', ''), '0'), '.');
+                    @endphp
+                    <input type="number" name="weekly_loss_kg" min="0" max="2" step="0.0001" value="{{ $weeklyLossValue === '' ? '0' : $weeklyLossValue }}" @disabled(auth()->guest()) @required(auth()->check())>
                 </label>
                 @auth
                     <button type="submit">Update target</button>
@@ -174,6 +185,9 @@
                     <p class="error">{{ $message }}</p>
                 @enderror
             @endforeach
+            @if ($plan)
+                <script type="application/json" id="deficit-plan">@json($plan->deficitInputs())</script>
+            @endif
         @endif
 
         <div class="body-fat-log">
@@ -363,7 +377,12 @@
     </section>
     @auth
         @push('scripts')
-            <script src="{{ asset('js/food-search.js') }}"></script>
+            <script src="{{ asset('js/food-search.js') }}?v={{ filemtime(public_path('js/food-search.js')) }}"></script>
         @endpush
     @endauth
+    @if ($plan)
+        @push('scripts')
+            <script src="{{ asset('js/deficit-slider.js') }}?v={{ filemtime(public_path('js/deficit-slider.js')) }}"></script>
+        @endpush
+    @endif
 </x-layout>

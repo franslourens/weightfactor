@@ -25,7 +25,7 @@ class ProfileController extends Controller
             'body_fat_percent' => ['required', 'numeric', 'min:3', 'max:60'],
             'target_body_fat_percent' => ['required', 'numeric', 'min:3', 'max:60'],
             'activity' => ['required', Rule::in(array_keys(Profile::activities()))],
-            'weekly_loss_kg' => ['required', 'numeric', 'min:0.1', 'max:1'],
+            'weekly_loss_kg' => ['required', 'numeric', 'min:0', 'max:2'],
         ]);
 
         $profile = Profile::query()->firstOrFail();

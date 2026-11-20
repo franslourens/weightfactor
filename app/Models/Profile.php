@@ -43,7 +43,7 @@ class Profile extends Model
             'height_cm' => 'decimal:1',
             'body_fat_percent' => 'decimal:1',
             'target_body_fat_percent' => 'decimal:1',
-            'weekly_loss_kg' => 'decimal:2',
+            'weekly_loss_kg' => 'decimal:4',
         ];
     }
 }
